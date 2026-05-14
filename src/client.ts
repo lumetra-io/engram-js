@@ -11,6 +11,8 @@ import {
 
 const DEFAULT_BASE_URL = 'https://api.lumetra.io';
 const DEFAULT_TIMEOUT_MS = 30_000;
+const SDK_VERSION = '0.1.0';
+const USER_AGENT = `engram-js/${SDK_VERSION}`;
 
 export class EngramClient {
   private readonly apiKey: string;
@@ -68,6 +70,7 @@ export class EngramClient {
         headers: {
           Authorization: `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',
+          'User-Agent': USER_AGENT,
         },
         body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
         signal: controller.signal,

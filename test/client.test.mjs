@@ -175,3 +175,66 @@ test('non-JSON 500 keeps body as raw string', async () => {
     (err) => err instanceof EngramError && err.status === 500 && /<html>/.test(String(err.body)),
   );
 });
+
+test('deleteBucket: DELETEs /v1/buckets/{b}', async () => {
+  const m = mockFetch(() => ({ status: 200, body: {} }));
+  const c = new EngramClient({ apiKey: KEY, fetch: m.fn });
+  await c.deleteBucket('scratch');
+  assert.equal(m.calls[0].url, `${BASE}/v1/buckets/scratch`);
+  assert.equal(m.calls[0].init.method, 'DELETE');
+  assert.equal(m.calls[0].init.headers.Authorization, `Bearer ${KEY}`);
+});
+
+test('getProfile: GETs /v1/buckets/{b}/profile and returns body', async () => {
+  const m = mockFetch(() => ({ status: 200, body: { profile: 'User likes tea.' } }));
+  const c = new EngramClient({ apiKey: KEY, fetch: m.fn });
+  const r = await c.getProfile('work');
+  assert.equal(m.calls[0].url, `${BASE}/v1/buckets/work/profile`);
+  assert.equal(m.calls[0].init.method, 'GET');
+  assert.equal(r.profile, 'User likes tea.');
+});
+
+test('getProfile: defaults bucket to "default"', async () => {
+  const m = mockFetch(() => ({ status: 200, body: { profile: null } }));
+  const c = new EngramClient({ apiKey: KEY, fetch: m.fn });
+  await c.getProfile();
+  assert.equal(m.calls[0].url, `${BASE}/v1/buckets/default/profile`);
+});
+
+test('regenerateProfile: POSTs /v1/buckets/{b}/profile/regenerate', async () => {
+  const m = mockFetch(() => ({ status: 200, body: { profile: 'New profile.' } }));
+  const c = new EngramClient({ apiKey: KEY, fetch: m.fn });
+  const r = await c.regenerateProfile('work');
+  assert.equal(m.calls[0].url, `${BASE}/v1/buckets/work/profile/regenerate`);
+  assert.equal(m.calls[0].init.method, 'POST');
+  assert.equal(r.profile, 'New profile.');
+});
+
+test('timeoutMs: aborts a slow request', async () => {
+  // Custom fetch never resolves until aborted; client should reject via AbortSignal.
+  const fn = (url, init) =>
+    new Promise((_, reject) => {
+      init.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+    });
+  const c = new EngramClient({ apiKey: KEY, fetch: fn, timeoutMs: 25 });
+  await assert.rejects(() => c.storeMemory('x', 'b'), (err) => err && err.name === 'AbortError');
+});
+
+test('uses globalThis.fetch when no custom fetch is provided', async () => {
+  const original = globalThis.fetch;
+  let called = false;
+  globalThis.fetch = async (url, init) => {
+    called = true;
+    return new Response(JSON.stringify({ id: 'g', bucket_name: 'b', token_count: 1 }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+  try {
+    const c = new EngramClient({ apiKey: KEY });
+    await c.storeMemory('hi', 'b');
+    assert.equal(called, true);
+  } finally {
+    globalThis.fetch = original;
+  }
+});

@@ -53,26 +53,28 @@ new EngramClient({
 ## API surface
 
 ### Memories
-- `storeMemory(content, bucket?)` — store a single fact
-- `storeMemories(contents[], bucket?)` — batched store
-- `listMemories(bucket?, { limit?, offset? })` — paginated list
-- `deleteMemory(memoryId, bucket?)` — delete one memory
-- `clearMemories(bucket)` — delete every memory in a bucket
+- `storeMemory(content, bucket?)` — store a single fact. `bucket` defaults to `"default"`.
+- `storeMemories(contents[], bucket?)` — batched store. `bucket` defaults to `"default"`.
+- `listMemories(bucket?, { limit?, offset? })` — paginated list (`limit` defaults to 20, `offset` to 0).
+- `deleteMemory(memoryId, bucket?)` — delete one memory. `bucket` defaults to `"default"`.
+- `clearMemories(bucket)` — delete every memory in a bucket. **No default — explicit bucket required** (prevents accidental wipes).
 
 ### Query
 - `query(question, { buckets?, topK?, skipSynthesis?, returnExplanation? })`
-  - `buckets` fuses across multiple buckets in one call
-  - `skipSynthesis: true` returns retrieval-only — no server-side LLM call
+  - `buckets` fuses across multiple buckets in one call. Defaults to `["default"]`.
+  - `topK` defaults to `8`.
+  - `skipSynthesis: true` returns retrieval-only — no server-side LLM call. Defaults to `false`.
+  - `returnExplanation` defaults to `true`.
   - response shape: `{ answer, explanation: { retrieved_memories, profile, graph_facts }, usage }`
 
 ### Buckets
 - `listBuckets()` — all buckets in your tenant
 - `createBucket(name, description?)`
-- `deleteBucket(bucket)`
+- `deleteBucket(bucket)` — **No default — explicit bucket required** (prevents accidental wipes).
 
 ### Profile
-- `getProfile(bucket?)` — the canonical profile prepended to recall
-- `regenerateProfile(bucket?)` — rebuild from current memories
+- `getProfile(bucket?)` — the canonical profile prepended to recall. `bucket` defaults to `"default"`.
+- `regenerateProfile(bucket?)` — rebuild from current memories. `bucket` defaults to `"default"`.
 
 ### Errors
 
