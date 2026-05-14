@@ -114,10 +114,14 @@ export class EngramClient {
     contents: string[],
     bucket: string = 'default',
   ): Promise<{ memories: StoreMemoryResult[] }> {
-    return this.request<{ memories: StoreMemoryResult[] }>(
+    // Defensively unwrap: depending on server version the batch endpoint
+    // returns either { memories: [...] } or a bare array. Normalize to the
+    // wrapped shape so callers don't have to switch on it.
+    const result = await this.request<{ memories: StoreMemoryResult[] } | StoreMemoryResult[]>(
       `/v1/buckets/${encodeURIComponent(bucket)}/memories`,
       { method: 'POST', body: { memories: contents.map((content) => ({ content })) } },
     );
+    return Array.isArray(result) ? { memories: result } : result;
   }
 
   async listMemories(
