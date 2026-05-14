@@ -1,4 +1,4 @@
-# engram-js
+# @lumetra/engram
 
 Official TypeScript client for [Engram](https://lumetra.io) — durable, explainable memory for AI agents.
 
@@ -9,17 +9,17 @@ Official TypeScript client for [Engram](https://lumetra.io) — durable, explain
 ## Install
 
 ```bash
-npm install engram-js
+npm install @lumetra/engram
 # or
-yarn add engram-js
+yarn add @lumetra/engram
 # or
-pnpm add engram-js
+pnpm add @lumetra/engram
 ```
 
 ## Quickstart
 
 ```ts
-import { EngramClient } from 'engram-js';
+import { EngramClient } from '@lumetra/engram';
 
 const engram = new EngramClient({
   apiKey: process.env.ENGRAM_API_KEY, // or set ENGRAM_API_KEY and omit
@@ -79,7 +79,7 @@ new EngramClient({
 All HTTP failures throw `EngramError`:
 
 ```ts
-import { EngramError } from 'engram-js';
+import { EngramError } from '@lumetra/engram';
 
 try {
   await engram.storeMemory('...');
