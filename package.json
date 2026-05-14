@@ -1,0 +1,61 @@
+{
+  "name": "engram-js",
+  "version": "0.1.0",
+  "description": "Official TypeScript client for Engram — durable, explainable memory for AI agents.",
+  "keywords": [
+    "engram",
+    "lumetra",
+    "memory",
+    "ai",
+    "agents",
+    "llm",
+    "mcp",
+    "rag"
+  ],
+  "license": "MIT",
+  "author": "Lumetra <hi@lumetra.io>",
+  "homepage": "https://lumetra.io",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lumetra-io/engram-js.git"
+  },
+  "bugs": {
+    "url": "https://github.com/lumetra-io/engram-js/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run typecheck && npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.4.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
