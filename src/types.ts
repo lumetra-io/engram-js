@@ -40,6 +40,12 @@ export interface StoreMemoryResult {
   token_count: number;
 }
 
+export interface ClearMemoriesResult {
+  success: boolean;
+  /** Number of memories actually deleted (server-reported). */
+  cleared_count: number;
+}
+
 export interface RetrievedMemory {
   id?: string;
   content: string;

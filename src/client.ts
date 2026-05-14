@@ -1,6 +1,7 @@
 import {
   EngramError,
   type Bucket,
+  type ClearMemoriesResult,
   type EngramClientOptions,
   type ListMemoriesOptions,
   type ListMemoriesResult,
@@ -11,7 +12,7 @@ import {
 
 const DEFAULT_BASE_URL = 'https://api.lumetra.io';
 const DEFAULT_TIMEOUT_MS = 30_000;
-const SDK_VERSION = '0.1.0';
+const SDK_VERSION = '0.2.0';
 const USER_AGENT = `engram-js/${SDK_VERSION}`;
 
 export class EngramClient {
@@ -147,11 +148,15 @@ export class EngramClient {
     );
   }
 
-  async clearMemories(bucket: string): Promise<void> {
-    await this.request<unknown>(
+  async clearMemories(bucket: string): Promise<ClearMemoriesResult> {
+    const res = await this.request<ClearMemoriesResult>(
       `/v1/buckets/${encodeURIComponent(bucket)}/memories`,
       { method: 'DELETE' },
     );
+    // Defensive default: older servers / proxies may strip the body. The
+    // contract surface is {success, cleared_count}; if the server stayed
+    // silent we still return the same shape so callers can rely on it.
+    return res ?? { success: true, cleared_count: 0 };
   }
 
   // ---------- Query ----------

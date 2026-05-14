@@ -2,6 +2,7 @@ export { EngramClient } from './client.js';
 export {
   EngramError,
   type Bucket,
+  type ClearMemoriesResult,
   type EngramClientOptions,
   type ListMemoriesOptions,
   type ListMemoriesResult,
