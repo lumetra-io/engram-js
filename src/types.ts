@@ -71,6 +71,23 @@ export interface QueryResult {
   usage?: QueryUsage;
 }
 
+/**
+ * One frame yielded by {@link EngramClient.queryStream}.
+ *
+ * The shape is discriminated by `type`:
+ *   - `delta` frames carry an incremental piece of the answer in `content`.
+ *   - `done` carries the final usage + (optional) explanation. Emitted
+ *     exactly once at the end of the stream.
+ */
+export type QueryStreamEvent =
+  | { type: 'delta'; content: string }
+  | {
+      type: 'done';
+      usage?: QueryUsage;
+      synthesis_usage?: unknown;
+      explanation?: QueryExplanation;
+    };
+
 export interface QueryOptions {
   /**
    * Buckets to fuse across. Defaults to `['default']`.

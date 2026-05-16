@@ -66,6 +66,35 @@ new EngramClient({
   - `skipSynthesis: true` returns retrieval-only — no server-side LLM call. Defaults to `false`.
   - `returnExplanation` defaults to `true`.
   - response shape: `{ answer, explanation: { retrieved_memories, profile, graph_facts }, usage }`
+- `queryStream(question, options?)` — same args, returns an `AsyncIterable<QueryStreamEvent>` that streams the answer
+
+## Streaming
+
+For broad questions, synthesis can take 10–25 seconds. `queryStream` yields the answer incrementally so you can render it as it's produced instead of waiting for the full response:
+
+```ts
+for await (const event of engram.queryStream('Summarize what I worked on this week', { buckets: ['work'] })) {
+  if (event.type === 'delta') {
+    process.stdout.write(event.content);
+  } else if (event.type === 'done') {
+    console.log();
+    console.log(`Used ${event.usage?.output_tokens} tokens`);
+  }
+}
+```
+
+Two frame types (discriminated by `type`):
+
+```ts
+type QueryStreamEvent =
+  | { type: 'delta'; content: string }
+  | { type: 'done'; usage?: QueryUsage; synthesis_usage?: unknown; explanation?: QueryExplanation };
+```
+
+- `delta` frames carry incremental synthesis output, in order. Zero or more.
+- `done` is emitted exactly once at the end with final usage and explanation.
+
+Break out of the `for await` loop to abort the request — the iterator's `return()` cancels the upstream fetch.
 
 ### Buckets
 - `listBuckets()` — all buckets in your tenant

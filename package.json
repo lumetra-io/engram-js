@@ -1,6 +1,6 @@
 {
   "name": "@lumetra/engram",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Official TypeScript client for Engram — durable, explainable memory for AI agents.",
   "keywords": [
     "engram",

@@ -10,6 +10,7 @@ export {
   type QueryExplanation,
   type QueryOptions,
   type QueryResult,
+  type QueryStreamEvent,
   type QueryUsage,
   type RetrievedMemory,
   type StoreMemoryResult,

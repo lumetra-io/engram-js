@@ -7,12 +7,13 @@ import {
   type ListMemoriesResult,
   type QueryOptions,
   type QueryResult,
+  type QueryStreamEvent,
   type StoreMemoryResult,
 } from './types.js';
 
 const DEFAULT_BASE_URL = 'https://api.lumetra.io';
 const DEFAULT_TIMEOUT_MS = 30_000;
-const SDK_VERSION = '0.2.0';
+const SDK_VERSION = '0.3.0';
 const USER_AGENT = `engram-js/${SDK_VERSION}`;
 
 export class EngramClient {
@@ -175,6 +176,192 @@ export class EngramClient {
         },
       },
     });
+  }
+
+  /**
+   * Streaming variant of {@link query}. Returns an async-iterable that
+   * yields {@link QueryStreamEvent} frames as the server produces them:
+   *
+   *   for await (const ev of engram.queryStream('...')) {
+   *     if (ev.type === 'delta') process.stdout.write(ev.content);
+   *     else if (ev.type === 'done') console.log(ev.usage);
+   *   }
+   *
+   * Break out of the loop to abort the request (the underlying
+   * AbortController is wired up to the fetch call).
+   */
+  queryStream(question: string, options: QueryOptions = {}): AsyncIterable<QueryStreamEvent> {
+    const buckets = options.buckets ?? ['default'];
+    const body = {
+      query: question,
+      buckets,
+      stream: true,
+      options: {
+        top_k: options.topK ?? 8,
+        return_explanation: options.returnExplanation ?? true,
+        skip_synthesis: options.skipSynthesis ?? false,
+      },
+    };
+    const url = `${this.baseUrl}/v1/query`;
+    const apiKey = this.apiKey;
+    const fetchImpl = this.fetchImpl;
+    const timeoutMs = this.timeoutMs;
+
+    return {
+      [Symbol.asyncIterator]: () => {
+        const controller = new AbortController();
+        // The timeout caps total wall-clock for the stream. Set generously
+        // because synthesis can run 10–25s before the first byte even with
+        // streaming on slow paths; clamp to the user's configured timeout.
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+        let responsePromise: Promise<Response> | null = null;
+        let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+        let done = false;
+        const queue: QueryStreamEvent[] = [];
+        let pendingError: unknown = null;
+
+        const ensureStarted = async (): Promise<void> => {
+          if (responsePromise) return;
+          responsePromise = fetchImpl(url, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+              Accept: 'text/event-stream',
+              'User-Agent': USER_AGENT,
+            },
+            body: JSON.stringify(body),
+            signal: controller.signal,
+          });
+          const res = await responsePromise;
+          if (!res.ok) {
+            const text = await res.text().catch(() => '');
+            let parsed: unknown = text;
+            try {
+              parsed = text ? JSON.parse(text) : text;
+            } catch {
+              /* keep raw text */
+            }
+            const detail =
+              parsed && typeof parsed === 'object' && parsed !== null && 'error' in parsed
+                ? (parsed as { error: unknown }).error
+                : parsed;
+            throw new EngramError(
+              `Engram API ${res.status}: ${typeof detail === 'string' ? detail : JSON.stringify(detail ?? '')}`,
+              res.status,
+              parsed,
+            );
+          }
+          if (!res.body) {
+            throw new EngramError('Engram API: streaming response has no body', res.status, null);
+          }
+          reader = res.body.getReader();
+        };
+
+        const drainBuffer = (): void => {
+          // SSE frames are separated by a blank line ('\n\n'). Each frame
+          // is one or more 'field: value' lines. We only care about
+          // 'data:' lines for this stream.
+          let idx: number;
+          while ((idx = buffer.indexOf('\n\n')) !== -1) {
+            const frame = buffer.slice(0, idx);
+            buffer = buffer.slice(idx + 2);
+            const dataLines: string[] = [];
+            for (const rawLine of frame.split('\n')) {
+              const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine;
+              if (line.startsWith('data: ')) {
+                dataLines.push(line.slice(6));
+              } else if (line.startsWith('data:')) {
+                dataLines.push(line.slice(5));
+              }
+            }
+            if (dataLines.length === 0) continue;
+            const payloadStr = dataLines.join('\n');
+            if (payloadStr === '[DONE]') {
+              done = true;
+              return;
+            }
+            let payload: unknown;
+            try {
+              payload = JSON.parse(payloadStr);
+            } catch {
+              // Malformed frame — skip rather than corrupt the stream.
+              continue;
+            }
+            if (payload && typeof payload === 'object') {
+              const obj = payload as Record<string, unknown>;
+              if (obj.error) {
+                pendingError = new EngramError(String(obj.error), 0, obj);
+                done = true;
+                return;
+              }
+              // OpenAI-style delta chunk
+              const choices = obj.choices as Array<{ delta?: { content?: string } }> | undefined;
+              if (Array.isArray(choices) && choices.length > 0) {
+                const delta = choices[0]?.delta?.content;
+                if (typeof delta === 'string' && delta.length > 0) {
+                  queue.push({ type: 'delta', content: delta });
+                }
+                continue;
+              }
+              // Final usage / explanation frame (no 'choices' key).
+              queue.push({ type: 'done', ...(obj as Omit<Extract<QueryStreamEvent, { type: 'done' }>, 'type'>) });
+            }
+          }
+        };
+
+        return {
+          next: async (): Promise<IteratorResult<QueryStreamEvent>> => {
+            try {
+              await ensureStarted();
+            } catch (err) {
+              clearTimeout(timer);
+              throw err;
+            }
+            while (queue.length === 0 && !done) {
+              if (!reader) {
+                clearTimeout(timer);
+                throw new EngramError('Engram API: stream reader missing', 0, null);
+              }
+              const chunk = await reader.read();
+              if (chunk.done) {
+                // Flush whatever's left in the buffer (some servers don't
+                // terminate with a trailing blank line).
+                if (buffer.length > 0) {
+                  buffer += '\n\n';
+                  drainBuffer();
+                }
+                done = true;
+                break;
+              }
+              buffer += decoder.decode(chunk.value, { stream: true });
+              drainBuffer();
+            }
+            if (queue.length > 0) {
+              return { value: queue.shift() as QueryStreamEvent, done: false };
+            }
+            clearTimeout(timer);
+            if (pendingError) throw pendingError;
+            return { value: undefined as unknown as QueryStreamEvent, done: true };
+          },
+          return: async (): Promise<IteratorResult<QueryStreamEvent>> => {
+            // Caller broke out of the for-await loop — cancel the upstream
+            // request so we're not holding the connection open.
+            clearTimeout(timer);
+            controller.abort();
+            try {
+              await reader?.cancel();
+            } catch {
+              /* ignored */
+            }
+            return { value: undefined as unknown as QueryStreamEvent, done: true };
+          },
+        };
+      },
+    };
   }
 
   // ---------- Buckets ----------
