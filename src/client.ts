@@ -13,14 +13,33 @@ import {
 
 const DEFAULT_BASE_URL = 'https://api.lumetra.io';
 const DEFAULT_TIMEOUT_MS = 30_000;
+const DEFAULT_MAX_RETRIES_ON_429 = 3;
+// Cap on per-attempt backoff so a misconfigured server can't force
+// callers to sleep for minutes.
+const RETRY_AFTER_CAP_MS = 30_000;
 const SDK_VERSION = '0.3.0';
 const USER_AGENT = `engram-js/${SDK_VERSION}`;
+
+function parseRetryAfterMs(header: string | null, defaultBackoffMs: number): number {
+  if (header) {
+    const value = Number(header.trim());
+    if (Number.isFinite(value) && value >= 0) {
+      return Math.min(value * 1000, RETRY_AFTER_CAP_MS);
+    }
+  }
+  return Math.min(defaultBackoffMs, RETRY_AFTER_CAP_MS);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export class EngramClient {
   private readonly apiKey: string;
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
   private readonly timeoutMs: number;
+  private readonly maxRetriesOn429: number;
 
   constructor(options: EngramClientOptions = {}) {
     const apiKey =
@@ -41,6 +60,7 @@ export class EngramClient {
     this.baseUrl = baseUrl.replace(/\/+$/, '');
     this.fetchImpl = options.fetch ?? globalThis.fetch;
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.maxRetriesOn429 = Math.max(0, options.maxRetriesOn429 ?? DEFAULT_MAX_RETRIES_ON_429);
 
     if (typeof this.fetchImpl !== 'function') {
       throw new Error(
@@ -62,48 +82,70 @@ export class EngramClient {
       }
     }
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    // 429-aware retry. The Engram API enforces a per-tenant concurrent-
+    // request cap and sets Retry-After on 429s; without retry handling,
+    // bursty clients fail immediately under load. The body is JSON-
+    // serialized once outside the loop so each attempt sends an
+    // identical request.
+    const requestBody = init.body !== undefined ? JSON.stringify(init.body) : undefined;
+    let attemptsRemaining = this.maxRetriesOn429;
+    let backoffMs = 1000;
 
-    let res: Response;
-    try {
-      res = await this.fetchImpl(url.toString(), {
-        method: init.method,
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json',
-          'User-Agent': USER_AGENT,
-        },
-        body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timer);
-    }
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), this.timeoutMs);
 
-    const text = await res.text();
-    let parsed: unknown = undefined;
-    if (text) {
+      let res: Response;
       try {
-        parsed = JSON.parse(text);
-      } catch {
-        parsed = text;
+        res = await this.fetchImpl(url.toString(), {
+          method: init.method,
+          headers: {
+            Authorization: `Bearer ${this.apiKey}`,
+            'Content-Type': 'application/json',
+            'User-Agent': USER_AGENT,
+          },
+          body: requestBody,
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timer);
       }
-    }
 
-    if (!res.ok) {
-      const detail =
-        parsed && typeof parsed === 'object' && parsed !== null && 'error' in parsed
-          ? (parsed as { error: unknown }).error
-          : parsed;
-      throw new EngramError(
-        `Engram API ${res.status}: ${typeof detail === 'string' ? detail : JSON.stringify(detail ?? '')}`,
-        res.status,
-        parsed,
-      );
-    }
+      if (res.status === 429 && attemptsRemaining > 0) {
+        // Drain the body so the connection can return to the pool.
+        await res.text().catch(() => undefined);
+        const delay = parseRetryAfterMs(res.headers.get('Retry-After'), backoffMs);
+        await sleep(delay);
+        attemptsRemaining -= 1;
+        backoffMs = Math.min(backoffMs * 2, RETRY_AFTER_CAP_MS);
+        continue;
+      }
 
-    return parsed as T;
+      const text = await res.text();
+      let parsed: unknown = undefined;
+      if (text) {
+        try {
+          parsed = JSON.parse(text);
+        } catch {
+          parsed = text;
+        }
+      }
+
+      if (!res.ok) {
+        const detail =
+          parsed && typeof parsed === 'object' && parsed !== null && 'error' in parsed
+            ? (parsed as { error: unknown }).error
+            : parsed;
+        throw new EngramError(
+          `Engram API ${res.status}: ${typeof detail === 'string' ? detail : JSON.stringify(detail ?? '')}`,
+          res.status,
+          parsed,
+        );
+      }
+
+      return parsed as T;
+    }
   }
 
   // ---------- Memories ----------
@@ -206,6 +248,8 @@ export class EngramClient {
     const apiKey = this.apiKey;
     const fetchImpl = this.fetchImpl;
     const timeoutMs = this.timeoutMs;
+    const maxRetriesOn429 = this.maxRetriesOn429;
+    const bodyJson = JSON.stringify(body);
 
     return {
       [Symbol.asyncIterator]: () => {
@@ -215,7 +259,7 @@ export class EngramClient {
         // streaming on slow paths; clamp to the user's configured timeout.
         const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-        let responsePromise: Promise<Response> | null = null;
+        let started = false;
         let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
         const decoder = new TextDecoder('utf-8');
         let buffer = '';
@@ -224,41 +268,58 @@ export class EngramClient {
         let pendingError: unknown = null;
 
         const ensureStarted = async (): Promise<void> => {
-          if (responsePromise) return;
-          responsePromise = fetchImpl(url, {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${apiKey}`,
-              'Content-Type': 'application/json',
-              Accept: 'text/event-stream',
-              'User-Agent': USER_AGENT,
-            },
-            body: JSON.stringify(body),
-            signal: controller.signal,
-          });
-          const res = await responsePromise;
-          if (!res.ok) {
-            const text = await res.text().catch(() => '');
-            let parsed: unknown = text;
-            try {
-              parsed = text ? JSON.parse(text) : text;
-            } catch {
-              /* keep raw text */
+          if (started) return;
+          started = true;
+          // 429-aware retry at the connection-open stage only. Once
+          // the response body starts flowing we can't resume mid-
+          // stream safely.
+          let attemptsRemaining = maxRetriesOn429;
+          let backoffMs = 1000;
+          // eslint-disable-next-line no-constant-condition
+          while (true) {
+            const res = await fetchImpl(url, {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${apiKey}`,
+                'Content-Type': 'application/json',
+                Accept: 'text/event-stream',
+                'User-Agent': USER_AGENT,
+              },
+              body: bodyJson,
+              signal: controller.signal,
+            });
+            if (res.status === 429 && attemptsRemaining > 0) {
+              await res.text().catch(() => undefined);
+              const delay = parseRetryAfterMs(res.headers.get('Retry-After'), backoffMs);
+              await sleep(delay);
+              attemptsRemaining -= 1;
+              backoffMs = Math.min(backoffMs * 2, RETRY_AFTER_CAP_MS);
+              continue;
             }
-            const detail =
-              parsed && typeof parsed === 'object' && parsed !== null && 'error' in parsed
-                ? (parsed as { error: unknown }).error
-                : parsed;
-            throw new EngramError(
-              `Engram API ${res.status}: ${typeof detail === 'string' ? detail : JSON.stringify(detail ?? '')}`,
-              res.status,
-              parsed,
-            );
+            if (!res.ok) {
+              const text = await res.text().catch(() => '');
+              let parsed: unknown = text;
+              try {
+                parsed = text ? JSON.parse(text) : text;
+              } catch {
+                /* keep raw text */
+              }
+              const detail =
+                parsed && typeof parsed === 'object' && parsed !== null && 'error' in parsed
+                  ? (parsed as { error: unknown }).error
+                  : parsed;
+              throw new EngramError(
+                `Engram API ${res.status}: ${typeof detail === 'string' ? detail : JSON.stringify(detail ?? '')}`,
+                res.status,
+                parsed,
+              );
+            }
+            if (!res.body) {
+              throw new EngramError('Engram API: streaming response has no body', res.status, null);
+            }
+            reader = res.body.getReader();
+            return;
           }
-          if (!res.body) {
-            throw new EngramError('Engram API: streaming response has no body', res.status, null);
-          }
-          reader = res.body.getReader();
         };
 
         const drainBuffer = (): void => {

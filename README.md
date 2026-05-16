@@ -37,6 +37,10 @@ console.log(result.answer);
 console.log(result.explanation?.retrieved_memories);
 ```
 
+### Automatic 429 retry
+
+The Engram API enforces a per-tenant concurrent-request cap and returns `429 Too Many Requests` with a `Retry-After` header when you exceed it. The client honors that header automatically (up to `maxRetriesOn429` attempts, default 3, capped at 30s per sleep) so bursty workloads don't fail on the first contention spike. Pass `maxRetriesOn429: 0` in the constructor to opt out and surface 429 as `EngramError` immediately.
+
 ## Configuration
 
 ```ts

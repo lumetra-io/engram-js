@@ -16,6 +16,13 @@ export interface EngramClientOptions {
    * Request timeout in milliseconds. Defaults to 30000 (30s).
    */
   timeoutMs?: number;
+  /**
+   * How many times to retry on a 429 (per-tenant concurrent-request cap).
+   * Honors the server's `Retry-After` header, capped at 30s per sleep.
+   * Defaults to 3. Set to 0 to disable retry and surface 429 as `EngramError`
+   * on the first attempt.
+   */
+  maxRetriesOn429?: number;
 }
 
 export interface Bucket {
