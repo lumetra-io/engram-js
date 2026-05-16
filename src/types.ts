@@ -13,9 +13,18 @@ export interface EngramClientOptions {
    */
   fetch?: typeof fetch;
   /**
-   * Request timeout in milliseconds. Defaults to 30000 (30s).
+   * Request timeout in milliseconds for buffered (non-streaming) calls.
+   * Defaults to 30000 (30s).
    */
   timeoutMs?: number;
+  /**
+   * Timeout in milliseconds for `queryStream` calls. Streaming responses
+   * can sit in the prep phase (retrieval + extractor pass) for 5–15s
+   * before the first synthesis token arrives, so the buffered 30s
+   * default would leave no headroom for the streamed body. Defaults to
+   * 300000 (5 min). Use a higher value for very large synthesis bodies.
+   */
+  streamTimeoutMs?: number;
   /**
    * How many times to retry on a 429 (per-tenant concurrent-request cap).
    * Honors the server's `Retry-After` header, capped at 30s per sleep.

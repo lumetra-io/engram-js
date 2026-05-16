@@ -13,11 +13,12 @@ import {
 
 const DEFAULT_BASE_URL = 'https://api.lumetra.io';
 const DEFAULT_TIMEOUT_MS = 30_000;
+const DEFAULT_STREAM_TIMEOUT_MS = 300_000;
 const DEFAULT_MAX_RETRIES_ON_429 = 3;
 // Cap on per-attempt backoff so a misconfigured server can't force
 // callers to sleep for minutes.
 const RETRY_AFTER_CAP_MS = 30_000;
-const SDK_VERSION = '0.3.0';
+const SDK_VERSION = '0.3.1';
 const USER_AGENT = `engram-js/${SDK_VERSION}`;
 
 function parseRetryAfterMs(header: string | null, defaultBackoffMs: number): number {
@@ -39,6 +40,7 @@ export class EngramClient {
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
   private readonly timeoutMs: number;
+  private readonly streamTimeoutMs: number;
   private readonly maxRetriesOn429: number;
 
   constructor(options: EngramClientOptions = {}) {
@@ -60,6 +62,7 @@ export class EngramClient {
     this.baseUrl = baseUrl.replace(/\/+$/, '');
     this.fetchImpl = options.fetch ?? globalThis.fetch;
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.streamTimeoutMs = options.streamTimeoutMs ?? DEFAULT_STREAM_TIMEOUT_MS;
     this.maxRetriesOn429 = Math.max(0, options.maxRetriesOn429 ?? DEFAULT_MAX_RETRIES_ON_429);
 
     if (typeof this.fetchImpl !== 'function') {
@@ -247,7 +250,7 @@ export class EngramClient {
     const url = `${this.baseUrl}/v1/query`;
     const apiKey = this.apiKey;
     const fetchImpl = this.fetchImpl;
-    const timeoutMs = this.timeoutMs;
+    const timeoutMs = this.streamTimeoutMs;
     const maxRetriesOn429 = this.maxRetriesOn429;
     const bodyJson = JSON.stringify(body);
 
