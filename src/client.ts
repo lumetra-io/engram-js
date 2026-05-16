@@ -18,7 +18,7 @@ const DEFAULT_MAX_RETRIES_ON_429 = 3;
 // Cap on per-attempt backoff so a misconfigured server can't force
 // callers to sleep for minutes.
 const RETRY_AFTER_CAP_MS = 30_000;
-const SDK_VERSION = '0.3.1';
+const SDK_VERSION = '0.3.2';
 const USER_AGENT = `engram-js/${SDK_VERSION}`;
 
 function parseRetryAfterMs(header: string | null, defaultBackoffMs: number): number {

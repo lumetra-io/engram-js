@@ -37,6 +37,12 @@ export interface EngramClientOptions {
 export interface Bucket {
   id: string;
   name: string;
+  /**
+   * Mirror of `name`. The server emits both so callers iterating both
+   * `listBuckets` and `storeMemory` responses can use one field name.
+   * Prefer `name` in new code.
+   */
+  bucket_name?: string;
   description?: string | null;
   created_at: string;
   memory_count?: number;
@@ -52,6 +58,11 @@ export interface Memory {
 
 export interface StoreMemoryResult {
   id: string;
+  /**
+   * Alias for `id` — older API docs / older SDKs referenced this name.
+   * Always present; prefer `id` in new code.
+   */
+  memory_id?: string;
   bucket_name: string;
   token_count: number;
 }
@@ -83,6 +94,12 @@ export interface QueryUsage {
 
 export interface QueryResult {
   answer: string;
+  /**
+   * Top-level count of retrieved memories. Equivalent to
+   * `result.explanation?.retrieved_memories.length` but present even
+   * when `returnExplanation` is false.
+   */
+  memories_found?: number;
   explanation?: QueryExplanation;
   usage?: QueryUsage;
 }
