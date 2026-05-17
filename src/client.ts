@@ -19,7 +19,7 @@ const DEFAULT_MAX_RETRIES_ON_429 = 3;
 // Cap on per-attempt backoff so a misconfigured server can't force
 // callers to sleep for minutes.
 const RETRY_AFTER_CAP_MS = 30_000;
-const SDK_VERSION = '0.4.0';
+const SDK_VERSION = '0.5.0';
 const USER_AGENT = `engram-js/${SDK_VERSION}`;
 
 function parseRetryAfterMs(header: string | null, defaultBackoffMs: number): number {
@@ -216,16 +216,24 @@ export class EngramClient {
 
   async query(question: string, options: QueryOptions = {}): Promise<QueryResult> {
     const buckets = options.buckets ?? ['default'];
+    const opts: Record<string, unknown> = {
+      top_k: options.topK ?? 8,
+      return_explanation: options.returnExplanation ?? true,
+      skip_synthesis: options.skipSynthesis ?? false,
+    };
+    if (options.maxTokens !== undefined) opts.max_tokens = options.maxTokens;
+    if (options.minSimilarityThreshold !== undefined) {
+      opts.min_similarity_threshold = options.minSimilarityThreshold;
+    }
+    if (options.topKPerBucket !== undefined) opts.top_k_per_bucket = options.topKPerBucket;
+    if (options.returnFormat !== undefined) opts.return_format = options.returnFormat;
+    if (options.responseSchema !== undefined) opts.response_schema = options.responseSchema;
     return this.request<QueryResult>('/v1/query', {
       method: 'POST',
       body: {
         query: question,
         buckets,
-        options: {
-          top_k: options.topK ?? 8,
-          return_explanation: options.returnExplanation ?? true,
-          skip_synthesis: options.skipSynthesis ?? false,
-        },
+        options: opts,
       },
     });
   }
@@ -244,15 +252,23 @@ export class EngramClient {
    */
   queryStream(question: string, options: QueryOptions = {}): AsyncIterable<QueryStreamEvent> {
     const buckets = options.buckets ?? ['default'];
+    const opts: Record<string, unknown> = {
+      top_k: options.topK ?? 8,
+      return_explanation: options.returnExplanation ?? true,
+      skip_synthesis: options.skipSynthesis ?? false,
+    };
+    if (options.maxTokens !== undefined) opts.max_tokens = options.maxTokens;
+    if (options.minSimilarityThreshold !== undefined) {
+      opts.min_similarity_threshold = options.minSimilarityThreshold;
+    }
+    if (options.topKPerBucket !== undefined) opts.top_k_per_bucket = options.topKPerBucket;
+    if (options.returnFormat !== undefined) opts.return_format = options.returnFormat;
+    if (options.responseSchema !== undefined) opts.response_schema = options.responseSchema;
     const body = {
       query: question,
       buckets,
       stream: true,
-      options: {
-        top_k: options.topK ?? 8,
-        return_explanation: options.returnExplanation ?? true,
-        skip_synthesis: options.skipSynthesis ?? false,
-      },
+      options: opts,
     };
     const url = `${this.baseUrl}/v1/query`;
     const apiKey = this.apiKey;

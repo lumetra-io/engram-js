@@ -63,6 +63,41 @@ new EngramClient({
 - `deleteMemory(memoryId, bucket?)` — delete one memory. `bucket` defaults to `"default"`.
 - `clearMemories(bucket)` — delete every memory in a bucket. **No default — explicit bucket required** (prevents accidental wipes).
 
+### Query knobs
+
+`query` and `queryStream` accept these tuning options (all optional):
+
+| Field | Type | What it does |
+|---|---|---|
+| `maxTokens` | `number` | Cap synthesis output. Lower for agent loops / cost control. |
+| `minSimilarityThreshold` | `number` | Drop retrieved chunks below this raw cosine similarity. Citations-grade precision. |
+| `topKPerBucket` | `number \| Record<string,number>` | Per-bucket retrieval depth. `{ edgar_AAPL: 20, prices_AAPL: 4 }` lets you express "deep here, shallow there." |
+| `returnFormat` | `'prose' \| 'json'` | When `'json'`, server returns JSON; result includes parsed `answer_json`. |
+| `responseSchema` | `Record<string, unknown>` (JSON Schema) | Hint the model with a target shape. Best-effort; validate client-side for strict. |
+
+Example:
+
+```ts
+const r = await engram.query("Apple's active legal proceedings", {
+  buckets: ['edgar_AAPL', 'patents_AAPL'],
+  topKPerBucket: { edgar_AAPL: 20, patents_AAPL: 5 },
+  maxTokens: 400,
+  returnFormat: 'json',
+  responseSchema: {
+    type: 'array',
+    items: {
+      properties: {
+        case_name: { type: 'string' },
+        jurisdiction: { type: 'string' },
+        status: { type: 'string' },
+      },
+    },
+  },
+});
+const cases = r.answer_json as Array<{case_name: string; jurisdiction: string; status: string}> | undefined;
+for (const c of cases ?? []) console.log(c);
+```
+
 ### Query
 - `query(question, { buckets?, topK?, skipSynthesis?, returnExplanation? })`
   - `buckets` fuses across multiple buckets in one call. Defaults to `["default"]`.

@@ -126,6 +126,12 @@ export interface QueryUsage {
 export interface QueryResult {
   answer: string;
   /**
+   * Parsed JSON when the request set `returnFormat: 'json'`. Present
+   * only on JSON queries — the parsed value (object / array / scalar)
+   * on success, or `null` when the model returned malformed JSON.
+   */
+  answer_json?: unknown;
+  /**
    * Top-level count of retrieved memories. Equivalent to
    * `result.explanation?.retrieved_memories.length` but present even
    * when `returnExplanation` is false.
@@ -158,7 +164,8 @@ export interface QueryOptions {
    */
   buckets?: string[];
   /**
-   * Maximum number of memories to retrieve. Defaults to 8.
+   * Maximum number of memories to retrieve per bucket. Defaults to 8.
+   * Used as the fallback K when `topKPerBucket` doesn't cover a bucket.
    */
   topK?: number;
   /**
@@ -170,6 +177,37 @@ export interface QueryOptions {
    * Whether to populate the `explanation` field. Defaults to true.
    */
   returnExplanation?: boolean;
+  /**
+   * Cap synthesis output tokens. Default is the server's (currently
+   * 8192). Lower for agent loops or cost control.
+   */
+  maxTokens?: number;
+  /**
+   * Floor for retrieval scores. When set, drops retrieved chunks
+   * below this raw cosine similarity — useful for citations-grade
+   * output where every chunk should actually match.
+   */
+  minSimilarityThreshold?: number;
+  /**
+   * Per-bucket retrieval depth. `number` for a uniform value across
+   * all buckets; an object for explicit per-bucket K (e.g.
+   * `{ edgar_AAPL: 20, prices_AAPL: 4 }`). Missing buckets fall back
+   * to `topK`. Lets callers express "deep retrieval on this one,
+   * shallow on the others."
+   */
+  topKPerBucket?: number | Record<string, number>;
+  /**
+   * `'prose'` (default) or `'json'`. When `'json'`, the server asks
+   * the synthesizer for JSON output and returns the parsed value
+   * under `result.answer_json` alongside the raw `result.answer`.
+   */
+  returnFormat?: 'prose' | 'json';
+  /**
+   * Optional JSON Schema describing the desired output shape. Included
+   * in the prompt to guide the model. Best-effort — validate
+   * client-side if you need strict enforcement.
+   */
+  responseSchema?: Record<string, unknown>;
 }
 
 export interface ListMemoriesOptions {
