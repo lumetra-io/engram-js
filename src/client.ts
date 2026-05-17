@@ -19,7 +19,7 @@ const DEFAULT_MAX_RETRIES_ON_429 = 3;
 // Cap on per-attempt backoff so a misconfigured server can't force
 // callers to sleep for minutes.
 const RETRY_AFTER_CAP_MS = 30_000;
-const SDK_VERSION = '0.5.0';
+const SDK_VERSION = '0.5.1';
 const USER_AGENT = `engram-js/${SDK_VERSION}`;
 
 function parseRetryAfterMs(header: string | null, defaultBackoffMs: number): number {
@@ -225,6 +225,9 @@ export class EngramClient {
     if (options.minSimilarityThreshold !== undefined) {
       opts.min_similarity_threshold = options.minSimilarityThreshold;
     }
+    if (options.minWeightedScore !== undefined) {
+      opts.min_weighted_score = options.minWeightedScore;
+    }
     if (options.topKPerBucket !== undefined) opts.top_k_per_bucket = options.topKPerBucket;
     if (options.returnFormat !== undefined) opts.return_format = options.returnFormat;
     if (options.responseSchema !== undefined) opts.response_schema = options.responseSchema;
@@ -260,6 +263,9 @@ export class EngramClient {
     if (options.maxTokens !== undefined) opts.max_tokens = options.maxTokens;
     if (options.minSimilarityThreshold !== undefined) {
       opts.min_similarity_threshold = options.minSimilarityThreshold;
+    }
+    if (options.minWeightedScore !== undefined) {
+      opts.min_weighted_score = options.minWeightedScore;
     }
     if (options.topKPerBucket !== undefined) opts.top_k_per_bucket = options.topKPerBucket;
     if (options.returnFormat !== undefined) opts.return_format = options.returnFormat;

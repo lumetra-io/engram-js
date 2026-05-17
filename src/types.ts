@@ -183,11 +183,20 @@ export interface QueryOptions {
    */
   maxTokens?: number;
   /**
-   * Floor for retrieval scores. When set, drops retrieved chunks
-   * below this raw cosine similarity — useful for citations-grade
-   * output where every chunk should actually match.
+   * Drop retrieved chunks whose **raw cosine similarity** (the
+   * underlying embedding score) is below this. Acts as a floor over
+   * the server's adaptive threshold. Useful when you specifically
+   * want a precision floor on the embedding signal.
    */
   minSimilarityThreshold?: number;
+  /**
+   * Drop retrieved chunks whose **weighted_score** (the post-RRF
+   * score surfaced in `explanation.retrieved_memories`) is below
+   * this. This is the score you see in responses — most callers
+   * want this rather than `minSimilarityThreshold` because the
+   * scales match.
+   */
+  minWeightedScore?: number;
   /**
    * Per-bucket retrieval depth. `number` for a uniform value across
    * all buckets; an object for explicit per-bucket K (e.g.
