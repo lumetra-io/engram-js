@@ -56,6 +56,14 @@ export interface Memory {
   token_count?: number;
 }
 
+export type StoreStatus = 'stored' | 'merged';
+
+export type MergeReason =
+  | 'content_hash'
+  | 'embedding_similarity'
+  | 'conflict_keep_existing'
+  | 'concurrent_insert_race';
+
 export interface StoreMemoryResult {
   id: string;
   /**
@@ -65,7 +73,30 @@ export interface StoreMemoryResult {
   memory_id?: string;
   bucket_name: string;
   token_count: number;
+  /**
+   * `"stored"` for fresh writes, `"merged"` when the server collapsed
+   * this write into a pre-existing memory via dedup. Always present.
+   */
+  status?: StoreStatus;
+  /** Present only when `status === "merged"`. ID of the canonical memory the write was absorbed into. */
+  deduped_into?: string;
+  /** Present only when `status === "merged"`. Similarity score in [0.0, 1.0] (1.0 for content-hash matches). */
+  similarity_score?: number;
+  /** Present only when `status === "merged"`. Reason for the merge. */
+  merge_reason?: MergeReason;
 }
+
+/**
+ * Dedup policy passed to `storeMemory`. The server's default (currently
+ * `"loose"`) applies when omitted.
+ *
+ * - `"off"` — store every write as a new memory; useful for templated
+ *   time-series ingest where structurally similar rows carry unique
+ *   values and would otherwise collapse.
+ * - `"loose"` — merge writes at similarity ≥ 0.95 (default).
+ * - `"strict"` — only merge near-identical content (≥ 0.99).
+ */
+export type DedupPolicy = 'off' | 'loose' | 'strict';
 
 export interface ClearMemoriesResult {
   success: boolean;

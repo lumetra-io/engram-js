@@ -2,6 +2,7 @@ import {
   EngramError,
   type Bucket,
   type ClearMemoriesResult,
+  type DedupPolicy,
   type EngramClientOptions,
   type ListMemoriesOptions,
   type ListMemoriesResult,
@@ -18,7 +19,7 @@ const DEFAULT_MAX_RETRIES_ON_429 = 3;
 // Cap on per-attempt backoff so a misconfigured server can't force
 // callers to sleep for minutes.
 const RETRY_AFTER_CAP_MS = 30_000;
-const SDK_VERSION = '0.3.2';
+const SDK_VERSION = '0.4.0';
 const USER_AGENT = `engram-js/${SDK_VERSION}`;
 
 function parseRetryAfterMs(header: string | null, defaultBackoffMs: number): number {
@@ -153,10 +154,16 @@ export class EngramClient {
 
   // ---------- Memories ----------
 
-  async storeMemory(content: string, bucket: string = 'default'): Promise<StoreMemoryResult> {
+  async storeMemory(
+    content: string,
+    bucket: string = 'default',
+    options: { dedup?: DedupPolicy } = {},
+  ): Promise<StoreMemoryResult> {
+    const body: Record<string, unknown> = { content };
+    if (options.dedup !== undefined) body.dedup = options.dedup;
     return this.request<StoreMemoryResult>(
       `/v1/buckets/${encodeURIComponent(bucket)}/memories`,
-      { method: 'POST', body: { content } },
+      { method: 'POST', body },
     );
   }
 

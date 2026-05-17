@@ -57,7 +57,7 @@ new EngramClient({
 ## API surface
 
 ### Memories
-- `storeMemory(content, bucket?)` — store a single fact. `bucket` defaults to `"default"`.
+- `storeMemory(content, bucket?, { dedup? })` — store a single fact. `bucket` defaults to `"default"`. `dedup` is `"off" | "loose" | "strict"`; omit to use the server's default policy. See [Dedup](#dedup) below.
 - `storeMemories(contents[], bucket?)` — batched store. `bucket` defaults to `"default"`.
 - `listMemories(bucket?, { limit?, offset? })` — paginated list (`limit` defaults to 20, `offset` to 0).
 - `deleteMemory(memoryId, bucket?)` — delete one memory. `bucket` defaults to `"default"`.
@@ -71,6 +71,33 @@ new EngramClient({
   - `returnExplanation` defaults to `true`.
   - response shape: `{ answer, explanation: { retrieved_memories, profile, graph_facts }, usage }`
 - `queryStream(question, options?)` — same args, returns an `AsyncIterable<QueryStreamEvent>` that streams the answer
+
+## Dedup
+
+The server runs a similarity check before storing. By default (`"loose"`, similarity ≥ 0.95) it collapses near-duplicate writes into the existing memory so re-ingesting the same source doesn't bloat the bucket. For most narrative content this is what you want.
+
+For templated time-series content (financial filings, daily metrics, log rows) where rows are structurally similar but each carries unique values, the default collapses real data. Use `dedup: 'off'` to disable.
+
+Every response now includes a `status` field. When `status === 'merged'`, the write was absorbed into an existing memory and three extra fields are present:
+
+```ts
+const r = await engram.storeMemory('Acme Q1 revenue: $245M', 'finance');
+if (r.status === 'merged') {
+  console.log(`merged into ${r.deduped_into} (${r.merge_reason}, sim=${r.similarity_score?.toFixed(3)})`);
+}
+```
+
+`merge_reason` is one of `content_hash`, `embedding_similarity`, `conflict_keep_existing`, `concurrent_insert_race`.
+
+Opt out for time-series ingest:
+
+```ts
+for (const row of monthlyPrices) {
+  await engram.storeMemory(row, 'prices_AAPL', { dedup: 'off' });
+}
+```
+
+`'strict'` is a middle ground — only collapses near-identical content (≥ 0.99).
 
 ## Streaming
 
