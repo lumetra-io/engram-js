@@ -16,6 +16,8 @@ yarn add @lumetra/engram
 pnpm add @lumetra/engram
 ```
 
+> **Server-side only.** Don't import `@lumetra/engram` in browser code — your `eng_live_...` API key would be visible in client JS and steal-able from any user. Always call the SDK from a server route, edge function, API handler, or worker. The Engram API key is a Bearer token; treat it like any backend secret.
+
 ## Quickstart
 
 ```ts
