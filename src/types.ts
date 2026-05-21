@@ -105,16 +105,56 @@ export interface ClearMemoriesResult {
 }
 
 export interface RetrievedMemory {
-  id?: string;
+  memory_id: string;
+  bucket_id?: string;
+  bucket_name?: string;
   content: string;
+  /** Raw similarity score from semantic retrieval, in [0, 1]. */
+  raw_score?: number;
+  /** Per-bucket weight applied during fusion. */
+  weight?: number;
+  /** `raw_score * weight`, used for ranking. */
+  weighted_score?: number;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * One graph fact returned alongside the retrieved memories. Each fact is
+ * linked back to the source memory it was extracted from via `memory_id`,
+ * so a caller can render "answer cited from memory X".
+ */
+export interface GraphFact {
+  subject: string;
+  predicate: string;
+  object: string;
+  /**
+   * ID of the memory this fact was extracted from. Cross-reference against
+   * `retrieved_memories[].memory_id` to surface the citing memory. May be
+   * absent for edges that predate the per-edge memory_id plumbing.
+   */
+  memory_id?: string;
+  bucket_id?: string;
+  bucket_name?: string;
+  /** Hop distance from the seed entity. 0 = direct fact, 1+ = transitive. */
+  depth?: number;
+  weight?: number;
+  /** ISO-8601 timestamp from the source memory, for temporal supersession. */
+  timestamp?: string | null;
+}
+
+export interface EntityMatch {
+  entity: string;
+  bucket_name?: string;
   score?: number;
-  bucket?: string;
 }
 
 export interface QueryExplanation {
   retrieved_memories?: RetrievedMemory[];
+  graph_facts?: GraphFact[];
+  entity_matches?: EntityMatch[];
+  /** Token count of the retrieval context fed to the synthesis pass. */
+  context_tokens?: number;
   profile?: string | null;
-  graph_facts?: string[];
 }
 
 export interface QueryUsage {

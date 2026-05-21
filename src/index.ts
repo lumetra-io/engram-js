@@ -5,6 +5,8 @@ export {
   type ClearMemoriesResult,
   type DedupPolicy,
   type EngramClientOptions,
+  type EntityMatch,
+  type GraphFact,
   type MergeReason,
   type StoreStatus,
   type ListMemoriesOptions,

@@ -106,7 +106,7 @@ for (const c of cases ?? []) console.log(c);
   - `topK` defaults to `8`.
   - `skipSynthesis: true` returns retrieval-only — no server-side LLM call. Defaults to `false`.
   - `returnExplanation` defaults to `true`.
-  - response shape: `{ answer, explanation: { retrieved_memories, profile, graph_facts }, usage }`
+  - response shape: `{ answer, memories_found, explanation: { retrieved_memories, graph_facts, entity_matches, context_tokens, profile }, usage }`. Each `graph_facts[i]` includes `memory_id` so you can match it against `retrieved_memories[].memory_id` and render the citing memory.
 - `queryStream(question, options?)` — same args, returns an `AsyncIterable<QueryStreamEvent>` that streams the answer
 
 ## Dedup
