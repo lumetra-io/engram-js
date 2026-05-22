@@ -6,6 +6,7 @@ import {
   type EngramClientOptions,
   type ListMemoriesOptions,
   type ListMemoriesResult,
+  type ProfileResult,
   type QueryOptions,
   type QueryResult,
   type QueryStreamEvent,
@@ -481,15 +482,15 @@ export class EngramClient {
 
   // ---------- Profile ----------
 
-  async getProfile(bucket: string = 'default'): Promise<{ profile: string | null }> {
-    return this.request<{ profile: string | null }>(
+  async getProfile(bucket: string = 'default'): Promise<ProfileResult> {
+    return this.request<ProfileResult>(
       `/v1/buckets/${encodeURIComponent(bucket)}/profile`,
       { method: 'GET' },
     );
   }
 
-  async regenerateProfile(bucket: string = 'default'): Promise<{ profile: string | null }> {
-    return this.request<{ profile: string | null }>(
+  async regenerateProfile(bucket: string = 'default'): Promise<ProfileResult> {
+    return this.request<ProfileResult>(
       `/v1/buckets/${encodeURIComponent(bucket)}/profile/regenerate`,
       { method: 'POST' },
     );

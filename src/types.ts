@@ -154,13 +154,50 @@ export interface QueryExplanation {
   entity_matches?: EntityMatch[];
   /** Token count of the retrieval context fed to the synthesis pass. */
   context_tokens?: number;
+  /** Legacy single-bucket profile, kept for backward compatibility. */
   profile?: string | null;
+  /**
+   * Multi-bucket profile snapshots, keyed by bucket name. Present when the
+   * query spanned more than one bucket and each had an installed profiler.
+   */
+  profiles?: Record<string, string | null>;
 }
 
 export interface QueryUsage {
   prompt_tokens?: number;
-  completion_tokens?: number;
+  /**
+   * Canonical server field. Older versions of this SDK exposed this as
+   * `completion_tokens`; the server has always emitted `output_tokens`.
+   */
+  output_tokens?: number;
   total_tokens?: number;
+}
+
+/**
+ * Profile snapshot returned by `getProfile` / `regenerateProfile`.
+ *
+ * `profile` is the canonical text prepended to recall. The remaining fields
+ * describe *which* snapshot is being returned and the state of the bucket's
+ * profiler agent. All fields beyond `profile` are optional so older servers
+ * that only return `{ profile }` still type-check.
+ */
+export interface ProfileResult {
+  /** UUID of the bucket this profile belongs to. */
+  bucket_id?: string;
+  /**
+   * `'ready'` when a snapshot exists, `'pending'` when the profiler is
+   * running its first tick, `'not_installed'` when no profiler agent
+   * is installed on the bucket.
+   */
+  status?: 'ready' | 'pending' | 'not_installed';
+  /** ISO-8601 timestamp of the most recent profile snapshot. */
+  updated_at?: string;
+  /** Number of memories present at the time the profile was generated. */
+  n_memories_at_gen?: number;
+  /** Canonical profile text. `null` when no snapshot has been produced yet. */
+  profile: string | null;
+  /** Identifier of the agent/source that produced the snapshot. */
+  source?: string;
 }
 
 export interface QueryResult {
